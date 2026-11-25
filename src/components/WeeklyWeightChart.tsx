@@ -254,6 +254,10 @@ export const WeeklyWeightChart: React.FC<WeeklyWeightChartProps> = ({
               ? isHi
                 ? '1 माह का वज़न ट्रेंड'
                 : '1-Month Weight Trend'
+              : range === '12w'
+              ? isHi
+                ? '3 माह का वज़न ट्रेंड'
+                : '3-Month Weight Trend'
               : isHi
               ? 'साप्ताहिक वज़न ट्रेंड'
               : 'Weight Progress Trend'}
@@ -302,7 +306,7 @@ export const WeeklyWeightChart: React.FC<WeeklyWeightChartProps> = ({
               [
                 ['1w', isHi ? '1 सप्ताह' : '1W'],
                 ['1m', isHi ? '1 माह' : '1M'],
-                ['12w', '12W'],
+                ['12w', isHi ? '3 माह' : '3M'],
                 ['all', isHi ? 'सभी' : 'All'],
               ] as [WeightChartRangeKey, string][]
             ).map(([val, lbl]) => (

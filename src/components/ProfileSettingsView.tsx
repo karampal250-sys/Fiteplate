@@ -7,10 +7,10 @@ import {
   Clock,
   Download,
   Droplets,
+  FileDown,
   Globe,
+  HardDrive,
   Lock,
-  LogIn,
-  LogOut,
   Moon,
   ShieldAlert,
   Sun,
@@ -27,9 +27,7 @@ interface ProfileSettingsViewProps {
   profile: UserProfile;
   language: Language;
   darkMode: boolean;
-  isOnline: boolean;
-  isSignedIn: boolean;
-  userEmail?: string | null;
+  savedFoodCount?: number;
   reminders: RemindersConfig;
   onUpdateReminders: (next: RemindersConfig) => void;
   onEnableAlarms?: () => void;
@@ -37,9 +35,7 @@ interface ProfileSettingsViewProps {
   onToggleDarkMode: () => void;
   onToggleHealthSync: () => void;
   onEditOnboarding: () => void;
-  onGoogleSignIn: () => void;
-  onFacebookSignIn: () => void;
-  onSignOut: () => void;
+  onExportThreeMonthPdf?: () => void;
   onExportJson: () => void;
   onDeleteAllData: () => Promise<void>;
 }
@@ -48,9 +44,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   profile,
   language,
   darkMode,
-  isOnline,
-  isSignedIn,
-  userEmail,
+  savedFoodCount = 0,
   reminders,
   onUpdateReminders,
   onEnableAlarms,
@@ -58,9 +52,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   onToggleDarkMode,
   onToggleHealthSync,
   onEditOnboarding,
-  onGoogleSignIn,
-  onFacebookSignIn,
-  onSignOut,
+  onExportThreeMonthPdf,
   onExportJson,
   onDeleteAllData,
 }) => {
@@ -369,48 +361,25 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           </button>
         </div>
 
-        {/* Cloud Auth & Offline Status */}
+        {/* On-Device Encrypted Local Database */}
         <div className="p-5 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Lock className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            <HardDrive className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             <div>
               <div className="text-sm font-semibold">
-                {isSignedIn ? userEmail || 'Firebase Cloud Sync' : isHi ? 'ऑफ़लाइन एन्क्रिप्टेड मोड' : 'Offline Encrypted Mode'}
+                {isHi ? 'ऑन-डिवाइस लोकल डेटाबेस' : 'On-Device Local Database'}
               </div>
               <div className="text-xs text-slate-500">
-                {isOnline ? (isHi ? 'नेटवर्क ऑनलाइन · AES-GCM सुरक्षित' : 'Online · AES-GCM encrypted local cache') : t(language, 'offlineReady')}
+                {isHi
+                  ? `आपके मोबाइल पर AES-GCM एन्क्रिप्टेड · ${savedFoodCount} भोजन प्रविष्टियाँ सहेजी गईं · कोई क्लाउड सर्वर नहीं`
+                  : `Stored exclusively on your device (IndexedDB + AES-GCM) · ${savedFoodCount} food logs saved`}
               </div>
             </div>
           </div>
-          {isSignedIn ? (
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900/60 text-xs font-semibold flex items-center gap-1.5"
-            >
-              <LogOut className="w-4 h-4" />
-              {t(language, 'signOut')}
-            </button>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={onFacebookSignIn}
-                className="min-h-[44px] px-3.5 rounded-xl bg-[#1877F2] text-white text-xs font-semibold flex items-center gap-1.5"
-              >
-                <span className="font-bold">f</span>
-                {t(language, 'signInFacebook')}
-              </button>
-              <button
-                type="button"
-                onClick={onGoogleSignIn}
-                className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-600 text-white text-xs font-semibold flex items-center gap-1.5"
-              >
-                <LogIn className="w-4 h-4" />
-                {t(language, 'signInGoogle')}
-              </button>
-            </div>
-          )}
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+            <Lock className="w-3.5 h-3.5" />
+            {isHi ? '100% लोकल व सुरक्षित' : '100% Local & Private'}
+          </span>
         </div>
 
         {/* Mobile / Android PWA Install */}
@@ -424,11 +393,21 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             <h3 className="font-display font-semibold text-base">{isHi ? 'गोपनीयता और डेटा नियंत्रण' : 'Privacy & Data Control'}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {isHi
-                ? 'आपका स्वास्थ्य डेटा डिवाइस पर AES-GCM से एन्क्रिप्टेड है।'
-                : 'Health records are encrypted locally via Web Crypto AES-GCM and secured by strict Firebase owner-only rules.'}
+                ? 'आपका पूरा स्वास्थ्य और भोजन डेटा केवल आपके डिवाइस के एन्क्रिप्टेड डेटाबेस (IndexedDB + AES-GCM) में सुरक्षित रहता है।'
+                : 'All health records and food history stay encrypted locally on your device via IndexedDB + Web Crypto AES-GCM — never stored on external servers.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {onExportThreeMonthPdf && (
+              <button
+                type="button"
+                onClick={onExportThreeMonthPdf}
+                className="min-h-[44px] px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5"
+              >
+                <FileDown className="w-4 h-4" />
+                {isHi ? '3-माह भोजन PDF डाउनलोड' : '3-Month Report (PDF)'}
+              </button>
+            )}
             <button
               type="button"
               onClick={onExportJson}
@@ -452,8 +431,8 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 space-y-3">
             <p className="text-xs font-medium text-rose-900 dark:text-rose-100">
               {isHi
-                ? 'क्या आप वाकई अपना खाता और सारा स्वास्थ्य डेटा स्थायी रूप से हटाना चाहते हैं?'
-                : 'Permanently delete your account, cloud Firestore records, and encrypted local data? This cannot be undone.'}
+                ? 'क्या आप वाकई अपने डिवाइस से सारा स्वास्थ्य और भोजन डेटा स्थायी रूप से हटाना चाहते हैं?'
+                : 'Permanently delete your profile, saved food history, and encrypted local database from this device? This cannot be undone.'}
             </p>
             <div className="flex gap-2">
               <button
@@ -491,19 +470,19 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           onClick={() => setShowBlueprint((v) => !v)}
           className="w-full min-h-[52px] px-5 py-3 flex items-center justify-between text-left text-sm font-semibold"
         >
-          <span>{isHi ? 'सिस्टम आर्किटेक्चर, स्क्रीन सूची और डेटाबेस स्कीमा' : 'App Screen List, Firestore Schema & Mobile Architecture'}</span>
+          <span>{isHi ? 'सिस्टम आर्किटेक्चर, स्क्रीन सूची और लोकल डेटाबेस' : 'App Screen List & On-Device Local Database'}</span>
           {showBlueprint ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
         {showBlueprint && (
           <div className="px-5 pb-5 pt-2 border-t border-slate-100 dark:border-emerald-950 text-xs text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
             <div>
-              <strong className="text-slate-900 dark:text-white">Screens:</strong> 1. Onboarding & Goal Calculator · 2. Daily Dashboard · 3. Food Search / Barcode / AI Photo Logger · 4. Quick Manual Food Entry · 5. Progress & Weekly Report · 6. AI Coach (7-Day Meal Plan, Home/Gym Workouts, Chat) · 7. Settings & Privacy.
+              <strong className="text-slate-900 dark:text-white">Screens:</strong> 1. Onboarding & Goal Calculator · 2. Daily Dashboard · 3. Food Search, Saved History & Daily Schedule · 4. Quick Manual Food Entry · 5. Progress, Weekly & 3-Month PDF Reports · 6. AI Coach (7-Day Meal Plan, Home/Gym Workouts, Chat) · 7. Settings & Local Privacy.
             </div>
             <div>
-              <strong className="text-slate-900 dark:text-white">Firestore Collections:</strong>{' '}
-              <code>/users/&#123;uid&#125;</code>, <code>foodLogs/&#123;logId&#125;</code>, <code>dailyMetrics/&#123;YYYY-MM-DD&#125;</code>,{' '}
-              <code>customFoods/&#123;foodId&#125;</code>, <code>favorites/&#123;foodId&#125;</code>, <code>progressEntries/&#123;entryId&#125;</code>,{' '}
-              <code>coachPlans/&#123;planId&#125;</code>, <code>activityLogs/&#123;activityId&#125;</code>, <code>dailySchedules/&#123;YYYY-MM-DD&#125;</code>.
+              <strong className="text-slate-900 dark:text-white">On-Device Encrypted Stores (IndexedDB + AES-GCM):</strong>{' '}
+              <code>profile</code>, <code>foodLogs</code>, <code>dailyMetrics</code>, <code>customFoods</code>,{' '}
+              <code>favoriteIds</code>, <code>progressEntries</code>, <code>mealPlan</code>, <code>workoutPlan</code>,{' '}
+              <code>activityLogs</code>, <code>dailySchedules</code>, <code>reminders</code>.
             </div>
           </div>
         )}

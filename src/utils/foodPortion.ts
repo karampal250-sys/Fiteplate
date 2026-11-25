@@ -24,7 +24,7 @@ export interface SmartUnitInfo {
 }
 
 const BOWL_KEYWORDS_REGEX =
-  /\b(bowl|katori|dal|daliya|khichdi|poha|upma|oats|curd|dahi|raita|salad|soup|sprouts|sabzi|curry|rajma|chole|chana|kadhi|sambar|rasam|halwa|kheer|custard|porridge|payasam|pongal|bhel|muesli|cornflakes|pulao|biryani|fried rice|noodles|pasta|macaroni)\b/i;
+  /\b(bowl|katori|dal|daliya|khichdi|poha|upma|oats|curd|dahi|raita|salad|koshimbir|soup|sprouts|sabzi|curry|rajma|chole|chana|kadhi|sambar|rasam|halwa|kheer|custard|porridge|payasam|pongal|bhel|muesli|cornflakes|pulao|biryani|fried rice|noodles|pasta|macaroni|pithla|zunka|usal|amti|varan|bharli|rassa|shrikhand|basundi|sheera|chakna|namkeen|bhujia|mixture|chivda|boondi|peanuts|makhana)\b/i;
 
 export function formatQtyNumber(val: number): string {
   const rounded = Math.round(val * 100) / 100;
@@ -147,13 +147,14 @@ export function resolveSmartServingUnit(
   }
 
   if (unit === 'plate') {
+    const isBasket = /\bbasket\b/i.test(labelLower);
     const isPack = /\b(pack|bag|tray)\b/i.test(labelLower);
     return {
       kind: 'plate',
-      storedUnit: 'plate',
-      singularEn: isPack ? 'Pack' : 'Plate',
-      pluralEn: isPack ? 'Packs' : 'Plates',
-      labelHi: isPack ? 'पैक' : 'प्लेट',
+      storedUnit: isBasket ? 'basket' : 'plate',
+      singularEn: isBasket ? 'Basket' : isPack ? 'Pack' : 'Plate',
+      pluralEn: isBasket ? 'Baskets' : isPack ? 'Packs' : 'Plates',
+      labelHi: isBasket ? 'बास्केट' : isPack ? 'पैक' : 'प्लेट',
       isCountable: false,
       baseCount: 1,
       isLiquid,
@@ -259,6 +260,18 @@ export function resolveStoredUnitInfo(servingUnitRaw: string): SmartUnitInfo {
       isCountable: false,
       baseCount: 1,
       isLiquid: true,
+    };
+  }
+  if (u === 'basket' || u === 'baskets') {
+    return {
+      kind: 'plate',
+      storedUnit: 'basket',
+      singularEn: 'Basket',
+      pluralEn: 'Baskets',
+      labelHi: 'बास्केट',
+      isCountable: false,
+      baseCount: 1,
+      isLiquid: false,
     };
   }
   if (u === 'plate' || u === 'plates') {

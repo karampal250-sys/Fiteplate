@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Minus, Plus, Search, Trash2, X } from 'lucide-react';
+import { Check, History, Minus, Plus, Search, Trash2, X } from 'lucide-react';
 import type {
   DietType,
   FoodItem,
@@ -25,6 +25,7 @@ import {
 } from '../utils/foodPortion';
 import { t } from '../i18n/translations';
 import { DailyScheduleCard } from './DailyScheduleCard';
+import { SavedFoodHistorySection } from './SavedFoodHistorySection';
 
 export type LoggerTab = 'search' | 'custom';
 
@@ -50,6 +51,8 @@ interface FoodLoggerSheetProps {
   onUpdateReminders?: (next: RemindersConfig) => void;
   onTestAlarm?: () => void;
   onEnableAlarms?: () => void;
+  onSelectDate?: (date: string) => void;
+  onExportThreeMonthPdf?: () => void;
   onClose?: () => void;
   isStandaloneTab?: boolean;
 }
@@ -81,6 +84,8 @@ export const FoodLoggerSheet: React.FC<FoodLoggerSheetProps> = ({
   onUpdateReminders,
   onTestAlarm,
   onEnableAlarms,
+  onSelectDate,
+  onExportThreeMonthPdf,
   onClose,
   isStandaloneTab,
 }) => {
@@ -88,9 +93,11 @@ export const FoodLoggerSheet: React.FC<FoodLoggerSheetProps> = ({
   const effectiveReminders = reminders || DEFAULT_SCHEDULE_REMINDERS;
   const searchBoxRef = useRef<HTMLInputElement | null>(null);
   const topPanelRef = useRef<HTMLDivElement | null>(null);
+  const historyPanelRef = useRef<HTMLDivElement | null>(null);
 
   const [mealType, setMealType] = useState<MealType>(initialMealType);
   const [showCustomForm, setShowCustomForm] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
   const [query, setQuery] = useState('');
   const [remoteSearchResults, setRemoteSearchResults] = useState<FoodItem[]>([]);
@@ -395,16 +402,42 @@ export const FoodLoggerSheet: React.FC<FoodLoggerSheetProps> = ({
               {activeDate} · {isHi ? 'शेड्यूल के अनुसार भोजन लॉग करें' : 'Tap Log on your schedule to switch meal'}
             </p>
           </div>
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="min-h-[44px] min-w-[44px] rounded-xl bg-stone-100 dark:bg-emerald-950/60 flex items-center justify-center hover:bg-stone-200 dark:hover:bg-emerald-900/50 transition-colors shrink-0"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {isStandaloneTab && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !showHistoryPanel;
+                  setShowHistoryPanel(next);
+                  if (next) {
+                    setTimeout(() => {
+                      historyPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 80);
+                  }
+                }}
+                className={`min-h-[38px] px-3 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                  showHistoryPanel
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>
+                  {isHi ? `इतिहास (${dayLogs.length})` : `Food History (${dayLogs.length})`}
+                </span>
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="min-h-[44px] min-w-[44px] rounded-xl bg-stone-100 dark:bg-emerald-950/60 flex items-center justify-center hover:bg-stone-200 dark:hover:bg-emerald-900/50 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Inline Added Confirmation */}
@@ -946,6 +979,20 @@ export const FoodLoggerSheet: React.FC<FoodLoggerSheetProps> = ({
             onUpdateReminders={onUpdateReminders}
             onTestAlarm={onTestAlarm}
             onEnableAlarms={onEnableAlarms}
+          />
+        </div>
+      )}
+
+      {/* Expandable Saved Food History across all past dates */}
+      {isStandaloneTab && showHistoryPanel && (
+        <div ref={historyPanelRef} className="lg:col-span-12">
+          <SavedFoodHistorySection
+            language={language}
+            foodLogs={dayLogs}
+            onDeleteLog={onDeleteLog}
+            onSelectDate={onSelectDate}
+            onExportThreeMonthPdf={onExportThreeMonthPdf}
+            defaultRange="3m"
           />
         </div>
       )}

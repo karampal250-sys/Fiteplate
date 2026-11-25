@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
 
 interface CalorieRingProps {
   eaten: number;
@@ -7,6 +8,8 @@ interface CalorieRingProps {
   labelRemaining: string;
   labelOver: string;
   labelTarget?: string;
+  labelGoalMet?: string;
+  justCompleted?: boolean;
 }
 
 export const CalorieHeroRing: React.FC<CalorieRingProps> = ({
@@ -16,6 +19,8 @@ export const CalorieHeroRing: React.FC<CalorieRingProps> = ({
   labelRemaining,
   labelOver,
   labelTarget = 'Target',
+  labelGoalMet = 'Goal Met',
+  justCompleted = false,
 }) => {
   const [mounted, setMounted] = useState(false);
 
@@ -37,10 +42,32 @@ export const CalorieHeroRing: React.FC<CalorieRingProps> = ({
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - pct);
   const isOver = remaining < 0;
+  const goalMet = target > 0 && eaten >= target;
+  const isExactOrOnTarget = goalMet && remaining >= 0;
 
   return (
-    <div className="relative flex items-center justify-center w-44 h-44 shrink-0">
+    <div
+      className={`relative flex items-center justify-center w-44 h-44 shrink-0 ${
+        justCompleted ? 'animate-ring-complete-pop' : ''
+      }`}
+    >
+      {justCompleted && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-1 rounded-full border-2 border-emerald-400/75 dark:border-emerald-400/60 pointer-events-none animate-ring-complete-halo"
+        />
+      )}
       <svg className="w-full h-full -rotate-90" viewBox="0 0 156 156" aria-hidden="true">
+        {goalMet && (
+          <circle
+            cx="78"
+            cy="78"
+            r={radius + 9}
+            fill="none"
+            strokeWidth="2"
+            className="stroke-emerald-400/35 dark:stroke-emerald-400/25 transition-opacity duration-500"
+          />
+        )}
         <circle
           cx="78"
           cy="78"
@@ -59,13 +86,20 @@ export const CalorieHeroRing: React.FC<CalorieRingProps> = ({
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
           className={`transition-all duration-1000 ease-out ${
-            isOver ? 'stroke-amber-500' : 'stroke-emerald-600 dark:stroke-emerald-500'
+            isOver
+              ? 'stroke-amber-500'
+              : isExactOrOnTarget
+              ? 'stroke-emerald-500 dark:stroke-emerald-400'
+              : 'stroke-emerald-600 dark:stroke-emerald-500'
           }`}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-3">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-          {labelTarget} {target}
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+          {goalMet && <Check className="w-3 h-3 stroke-[2.5]" />}
+          <span>
+            {labelTarget} {target}
+          </span>
         </span>
         <span
           className={`font-mono-num text-2xl sm:text-3xl font-bold tracking-tight leading-tight mt-0.5 ${
@@ -74,8 +108,14 @@ export const CalorieHeroRing: React.FC<CalorieRingProps> = ({
         >
           {Math.abs(remaining)}
         </span>
-        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-          {isOver ? labelOver : labelRemaining}
+        <span
+          className={`text-[11px] font-medium ${
+            remaining === 0
+              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          {remaining === 0 ? labelGoalMet : isOver ? labelOver : labelRemaining}
         </span>
       </div>
     </div>
@@ -158,6 +198,7 @@ interface WaterProgressRingProps {
   waterGoalMl: number;
   labelGoalReached: string;
   labelOfGoal: string;
+  justCompleted?: boolean;
 }
 
 export const WaterProgressRing: React.FC<WaterProgressRingProps> = ({
@@ -165,6 +206,7 @@ export const WaterProgressRing: React.FC<WaterProgressRingProps> = ({
   waterGoalMl,
   labelGoalReached,
   labelOfGoal,
+  justCompleted = false,
 }) => {
   const targetPct = Math.min(100, Math.max(0, (waterMl / Math.max(500, waterGoalMl)) * 100));
   const [animatedPct, setAnimatedPct] = useState(0);
@@ -211,13 +253,22 @@ export const WaterProgressRing: React.FC<WaterProgressRingProps> = ({
 
   return (
     <div
-      className="relative flex items-center justify-center w-32 h-32 shrink-0"
+      className={`relative flex items-center justify-center w-32 h-32 shrink-0 ${
+        justCompleted ? 'animate-ring-complete-pop' : ''
+      }`}
       role="progressbar"
       aria-valuenow={Math.round(targetPct)}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label="Daily water intake progress"
     >
+      {justCompleted && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-1 rounded-full border-2 border-sky-400/75 dark:border-emerald-400/65 pointer-events-none animate-ring-complete-halo"
+        />
+      )}
+
       {/* Subtle rising liquid level inside the inner circle */}
       <div className="absolute inset-3 rounded-full overflow-hidden bg-sky-50/70 dark:bg-sky-950/30 border border-sky-100/80 dark:border-sky-900/40 pointer-events-none">
         <div
@@ -229,6 +280,16 @@ export const WaterProgressRing: React.FC<WaterProgressRingProps> = ({
       </div>
 
       <svg className="w-full h-full -rotate-90 relative z-10" viewBox="0 0 120 120" aria-hidden="true">
+        {goalMet && (
+          <circle
+            cx="60"
+            cy="60"
+            r={radius + 7}
+            fill="none"
+            strokeWidth="2"
+            className="stroke-emerald-400/40 dark:stroke-emerald-400/30 transition-opacity duration-500"
+          />
+        )}
         <circle
           cx="60"
           cy="60"
@@ -246,9 +307,9 @@ export const WaterProgressRing: React.FC<WaterProgressRingProps> = ({
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
-          className={
+          className={`transition-colors duration-500 ${
             goalMet ? 'stroke-emerald-500 dark:stroke-emerald-400' : 'stroke-sky-500 dark:stroke-sky-400'
-          }
+          }`}
         />
       </svg>
 
@@ -260,8 +321,13 @@ export const WaterProgressRing: React.FC<WaterProgressRingProps> = ({
         >
           {Math.round(animatedPct)}%
         </span>
-        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
-          {goalMet ? labelGoalReached : labelOfGoal}
+        <span
+          className={`inline-flex items-center gap-0.5 text-[10px] font-semibold mt-1 ${
+            goalMet ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          {goalMet && <Check className="w-2.5 h-2.5 stroke-[2.75]" />}
+          <span>{goalMet ? labelGoalReached : labelOfGoal}</span>
         </span>
       </div>
     </div>

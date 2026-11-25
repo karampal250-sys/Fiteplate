@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
   AlarmClock,
   BarChart3,
   BellRing,
   Check,
   Download,
+  FileDown,
   Globe,
   Home,
-  LogIn,
-  LogOut,
   Menu,
   Moon,
   Plus,
@@ -37,35 +35,8 @@ import type {
   ScheduleSlot,
   UserProfile,
 } from './types/fitplate';
-import {
-  auth,
-  googleProvider,
-  facebookProvider,
-  extractSocialProfile,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  signOut,
-  deleteUser,
-  testFirestoreConnection,
-  type SocialPrefillData,
-} from './services/firebaseClient';
-import {
-  deleteActivityLogFromCloud,
-  deleteAllCloudUserData,
-  deleteFoodLogFromCloud,
-  fetchUserCloudBundle,
-  syncActivityLogToCloud,
-  syncCoachPlanToCloud,
-  syncCustomFoodToCloud,
-  syncDailyMetricToCloud,
-  syncDailyScheduleToCloud,
-  syncFoodLogToCloud,
-  syncProfileToCloud,
-  syncProgressEntryToCloud,
-  toggleFavoriteInCloud,
-} from './services/firestoreSync';
 import { loadEncryptedState, saveEncryptedState, wipeAllLocalHealthData } from './utils/cryptoStorage';
+import { exportThreeMonthReportPdf } from './utils/exportWeeklyReportPdf';
 import { calculateNutritionPlan } from './utils/nutritionMath';
 import {
   buildDailySchedule,
@@ -136,17 +107,11 @@ export default function App() {
   const [hydrated, setHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('today');
   const [activeDate, setActiveDate] = useState<string>(() => todayIso());
-  const [isOnline, setIsOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [socialPrefill, setSocialPrefill] = useState<SocialPrefillData | null>(null);
 
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [editingOnboarding, setEditingOnboarding] = useState(false);
-  const profileRef = useRef<UserProfile | null>(null);
-  useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const [foodLogs, setFoodLogs] = useState<FoodLogEntry[]>([]);
   const [dailyMetricsMap, setDailyMetricsMap] = useState<Record<string, DailyMetrics>>({});
@@ -179,29 +144,8 @@ export default function App() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
-  // Monitor online/offline state
+  // Load encrypted 100% on-device IndexedDB state on mount
   useEffect(() => {
-    const onUp = () => setIsOnline(true);
-    const onDown = () => setIsOnline(false);
-    window.addEventListener('online', onUp);
-    window.addEventListener('offline', onDown);
-    return () => {
-      window.removeEventListener('online', onUp);
-      window.removeEventListener('offline', onDown);
-    };
-  }, []);
-
-  // Load encrypted offline state + verify Firestore connectivity on mount
-  useEffect(() => {
-    testFirestoreConnection().catch(() => {});
-    getRedirectResult(auth)
-      .then(async (res) => {
-        if (res) {
-          const info = await extractSocialProfile(res);
-          if (info) setSocialPrefill(info);
-        }
-      })
-      .catch(() => {});
     loadEncryptedState<PersistedAppState>().then((saved) => {
       if (saved && saved.profile) {
         setProfile(saved.profile);
@@ -263,7 +207,9 @@ export default function App() {
       language,
       darkMode,
     };
-    saveEncryptedState(stateToSave);
+    saveQueueRef.current = saveQueueRef.current
+      .then(() => saveEncryptedState(stateToSave))
+      .catch(() => {});
   }, [
     hydrated,
     profile,
@@ -283,55 +229,7 @@ export default function App() {
     darkMode,
   ]);
 
-  // Firebase Auth listener -> hydrate cloud data if signed in
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
-      if (user) {
-        try {
-          const cloud = await fetchUserCloudBundle(user.uid);
-          if (cloud.profile) {
-            setProfile(cloud.profile);
-            setFoodLogs(cloud.foodLogs);
-            setDailyMetricsMap(cloud.dailyMetrics);
-            setCustomFoods(cloud.customFoods);
-            if (cloud.favoriteIds.length > 0) setFavoriteIds(cloud.favoriteIds);
-            setProgressEntries(cloud.progressEntries);
-            if (cloud.mealPlan) setMealPlan(cloud.mealPlan);
-            if (cloud.workoutPlan) setWorkoutPlan(cloud.workoutPlan);
-            if (cloud.activityLogs.length > 0) setActivityLogs(cloud.activityLogs);
-            if (Object.keys(cloud.dailySchedules).length > 0) setDailySchedulesMap(cloud.dailySchedules);
-            if (cloud.profile.wakeUpTime) {
-              setReminders((prev) => ({
-                ...prev,
-                ...deriveMealTimesFromWakeUp(cloud.profile!.wakeUpTime!, cloud.profile!.sleepTime),
-              }));
-            }
-            setLanguage(cloud.profile.language);
-            setDarkMode(cloud.profile.darkMode);
-          } else if (profileRef.current) {
-            const migrated = { ...profileRef.current, uid: user.uid };
-            setProfile(migrated);
-            await syncProfileToCloud(migrated);
-          } else {
-            // New social user without saved health profile: populate name/DOB prefill for profile setup
-            const providerId = user.providerData?.[0]?.providerId || '';
-            setSocialPrefill((prev) => ({
-              name: prev?.name || user.displayName || undefined,
-              dateOfBirth: prev?.dateOfBirth,
-              email: prev?.email || user.email || null,
-              provider: providerId.includes('facebook') ? 'facebook' : prev?.provider || 'google',
-            }));
-          }
-        } catch {
-          // Keep offline encrypted state seamlessly
-        }
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  const currentUid = firebaseUser?.uid || profile?.uid || 'local_user';
+  const currentUid = profile?.uid || 'local_device_user';
 
   const activeMetrics: DailyMetrics = useMemo(() => {
     return (
@@ -376,66 +274,12 @@ export default function App() {
       );
   }, [foodLogs]);
 
-  const handleGoogleSignIn = async () => {
-    try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      const info = await extractSocialProfile(cred);
-      if (info) setSocialPrefill(info);
-      showToast(language === 'hi' ? 'Google से सिंक हो गया' : 'Signed in with Google');
-    } catch (err) {
-      const code = (err as { code?: string })?.code || '';
-      if (
-        code === 'auth/popup-blocked' ||
-        code === 'auth/operation-not-supported-in-this-environment' ||
-        code === 'auth/cancelled-popup-request'
-      ) {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirErr) {
-          showToast(redirErr instanceof Error ? redirErr.message : 'Sign-in failed');
-          return;
-        }
-      }
-      showToast(err instanceof Error ? err.message : 'Sign-in cancelled');
-    }
-  };
-
-  const handleFacebookSignIn = async () => {
-    try {
-      const cred = await signInWithPopup(auth, facebookProvider);
-      const info = await extractSocialProfile(cred);
-      if (info) setSocialPrefill(info);
-      showToast(language === 'hi' ? 'Facebook ID से लॉगिन हो गया' : 'Signed in with Facebook');
-    } catch (err) {
-      const code = (err as { code?: string })?.code || '';
-      if (
-        code === 'auth/popup-blocked' ||
-        code === 'auth/operation-not-supported-in-this-environment' ||
-        code === 'auth/cancelled-popup-request'
-      ) {
-        try {
-          await signInWithRedirect(auth, facebookProvider);
-          return;
-        } catch (redirErr) {
-          showToast(redirErr instanceof Error ? redirErr.message : 'Facebook login failed');
-          return;
-        }
-      }
-      showToast(err instanceof Error ? err.message : 'Facebook login requires enabling Facebook Auth in Firebase Console');
-    }
-  };
-
-  const handleSignOut = async () => {
-    await signOut(auth);
-    showToast(language === 'hi' ? 'साइन आउट हो गया' : 'Signed out');
-  };
-
-  const handleCompleteOnboarding = async (nextProfile: UserProfile) => {
-    const uid = firebaseUser?.uid || nextProfile.uid || 'local_user';
+  const handleCompleteOnboarding = (nextProfile: UserProfile) => {
+    const uid = nextProfile.uid || 'local_device_user';
     const finalized: UserProfile = {
       ...nextProfile,
       uid,
+      authProvider: 'local',
       language,
       darkMode,
     };
@@ -460,13 +304,6 @@ export default function App() {
         createdAt: new Date().toISOString(),
       };
       setProgressEntries([initialEntry]);
-      if (firebaseUser) {
-        syncProfileToCloud(finalized)
-          .then(() => syncProgressEntryToCloud(uid, initialEntry))
-          .catch(() => {});
-      }
-    } else if (firebaseUser) {
-      syncProfileToCloud(finalized).catch(() => {});
     }
   };
 
@@ -510,9 +347,6 @@ export default function App() {
     setFoodLogs((prev) => [withUid, ...prev]);
     setRecentFoodIds((prev) => [entry.foodId, ...prev.filter((id) => id !== entry.foodId)].slice(0, 15));
     showToast(`${entry.foodName} · ${entry.calories} kcal`);
-    if (firebaseUser) {
-      syncFoodLogToCloud(currentUid, withUid).catch(() => {});
-    }
   };
 
   const handleUpdateFoodLogQty = (id: string, nextQty: number) => {
@@ -532,24 +366,15 @@ export default function App() {
       fiber: Math.round(target.fiber * ratio * 10) / 10,
     };
     setFoodLogs((prev) => prev.map((item) => (item.id === id ? updatedEntry : item)));
-    if (firebaseUser) {
-      syncFoodLogToCloud(currentUid, updatedEntry).catch(() => {});
-    }
   };
 
   const handleDeleteFoodLog = (id: string) => {
     setFoodLogs((prev) => prev.filter((l) => l.id !== id));
-    if (firebaseUser) {
-      deleteFoodLogFromCloud(currentUid, id).catch(() => {});
-    }
   };
 
   const handleUpdateMetrics = (next: DailyMetrics) => {
     const withUid = { ...next, uid: currentUid };
     setDailyMetricsMap((prev) => ({ ...prev, [activeDate]: withUid }));
-    if (firebaseUser) {
-      syncDailyMetricToCloud(currentUid, withUid).catch(() => {});
-    }
   };
 
   const handleAddActivity = (entry: ActivityLogEntry) => {
@@ -561,9 +386,6 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     });
     showToast(`${entry.activityName} · -${entry.caloriesBurned} kcal`);
-    if (firebaseUser) {
-      syncActivityLogToCloud(currentUid, withUid).catch(() => {});
-    }
   };
 
   const handleDeleteActivity = (id: string) => {
@@ -575,9 +397,6 @@ export default function App() {
         exerciseCalories: Math.max(0, activeMetrics.exerciseCalories - target.caloriesBurned),
         updatedAt: new Date().toISOString(),
       });
-    }
-    if (firebaseUser) {
-      deleteActivityLogFromCloud(currentUid, id).catch(() => {});
     }
   };
 
@@ -596,9 +415,6 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
     setDailySchedulesMap((prev) => ({ ...prev, [activeDate]: nextSchedule }));
-    if (firebaseUser) {
-      syncDailyScheduleToCloud(currentUid, nextSchedule).catch(() => {});
-    }
 
     if (slot.kind === 'water' && slot.waterMl) {
       const delta = isAlreadyDone ? -slot.waterMl : slot.waterMl;
@@ -621,9 +437,6 @@ export default function App() {
         sleepTime: next.sleepTime || profile.sleepTime,
       };
       setProfile(updatedProfile);
-      if (firebaseUser) {
-        syncProfileToCloud(updatedProfile).catch(() => {});
-      }
     }
   };
 
@@ -738,21 +551,8 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', unlockNotifications);
   }, [hydrated, profile, reminders.enabled, reminders.alarmsEnabled]);
 
-  const handleToggleFavorite = (food: FoodItem) => {
-    const exists = favoriteIds.includes(food.id);
-    const next = exists ? favoriteIds.filter((x) => x !== food.id) : [...favoriteIds, food.id];
-    setFavoriteIds(next);
-    if (firebaseUser) {
-      const cal = Math.round((food.per100g.calories * (food.servings[0]?.grams || 100)) / 100);
-      toggleFavoriteInCloud(currentUid, { id: food.id, name: food.name, calories: cal }, !exists).catch(() => {});
-    }
-  };
-
   const handleSaveCustomFood = (food: FoodItem) => {
     setCustomFoods((prev) => [food, ...prev.filter((f) => f.id !== food.id)]);
-    if (firebaseUser) {
-      syncCustomFoodToCloud(currentUid, food).catch(() => {});
-    }
     showToast(
       language === 'hi'
         ? `"${food.name}" सेव किया गया`
@@ -766,12 +566,6 @@ export default function App() {
     if (profile) {
       const updatedProfile = { ...profile, currentWeightKg: entry.weightKg };
       setProfile(updatedProfile);
-      if (firebaseUser) {
-        syncProfileToCloud(updatedProfile).catch(() => {});
-      }
-    }
-    if (firebaseUser) {
-      syncProgressEntryToCloud(currentUid, withUid).catch(() => {});
     }
     showToast(language === 'hi' ? 'प्रगति सहेजी गई' : 'Check-in saved');
   };
@@ -797,18 +591,13 @@ export default function App() {
       fatTargetG: Math.round(recalc.fatTargetG * ratio),
     };
     setProfile(nextProfile);
-    if (firebaseUser) {
-      syncProfileToCloud(nextProfile).catch(() => {});
-    }
     showToast(`${newCalories} kcal/day applied`);
   };
 
   const handleChangeLanguage = (nextLang: Language) => {
     setLanguage(nextLang);
     if (profile) {
-      const next = { ...profile, language: nextLang };
-      setProfile(next);
-      if (firebaseUser) syncProfileToCloud(next).catch(() => {});
+      setProfile({ ...profile, language: nextLang });
     }
   };
 
@@ -816,9 +605,7 @@ export default function App() {
     const nextDark = !darkMode;
     setDarkMode(nextDark);
     if (profile) {
-      const next = { ...profile, darkMode: nextDark };
-      setProfile(next);
-      if (firebaseUser) syncProfileToCloud(next).catch(() => {});
+      setProfile({ ...profile, darkMode: nextDark });
     }
   };
 
@@ -834,7 +621,26 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       });
     }
-    if (firebaseUser) syncProfileToCloud(next).catch(() => {});
+  };
+
+  const handleExportThreeMonthReport = () => {
+    if (!profile) return;
+    try {
+      const res = exportThreeMonthReportPdf({
+        profile,
+        entries: progressEntries,
+        foodLogs,
+        dailyMetricsMap,
+        activityLogs,
+      });
+      showToast(
+        language === 'hi'
+          ? `3-माह PDF डाउनलोड: ${res.fileName}`
+          : `Downloaded 3-Month PDF: ${res.fileName}`
+      );
+    } catch {
+      showToast(language === 'hi' ? 'PDF डाउनलोड विफल' : 'Could not generate PDF');
+    }
   };
 
   const handleExportJson = () => {
@@ -858,11 +664,7 @@ export default function App() {
   };
 
   const handleDeleteAllData = async () => {
-    if (firebaseUser) {
-      await deleteAllCloudUserData(firebaseUser.uid).catch(() => {});
-      await deleteUser(firebaseUser).catch(() => {});
-    }
-    wipeAllLocalHealthData();
+    await wipeAllLocalHealthData();
     setProfile(null);
     setFoodLogs([]);
     setDailyMetricsMap({});
@@ -874,7 +676,7 @@ export default function App() {
     setActivityLogs([]);
     setDailySchedulesMap({});
     setActiveTab('today');
-    showToast(language === 'hi' ? 'सभी डेटा हटाया गया' : 'All health data deleted');
+    showToast(language === 'hi' ? 'डिवाइस से सभी डेटा हटाया गया' : 'All local health data deleted');
   };
 
   if (!hydrated) {
@@ -889,15 +691,10 @@ export default function App() {
     return (
       <OnboardingFlow
         initialProfile={profile}
-        socialPrefill={socialPrefill}
         language={language}
         onChangeLanguage={handleChangeLanguage}
         onComplete={handleCompleteOnboarding}
         onCancel={editingOnboarding && profile ? () => setEditingOnboarding(false) : undefined}
-        onGoogleSignIn={handleGoogleSignIn}
-        onFacebookSignIn={handleFacebookSignIn}
-        isSignedIn={Boolean(firebaseUser)}
-        userEmail={firebaseUser?.email}
       />
     );
   }
@@ -984,14 +781,6 @@ export default function App() {
         </div>
       </header>
 
-      {!isOnline && (
-        <div className="bg-amber-500 text-white text-xs font-semibold text-center py-1.5 px-4">
-          {language === 'hi'
-            ? 'ऑफ़लाइन मोड — आपका डेटा सुरक्षित रूप से डिवाइस पर सहेजा जा रहा है'
-            : 'Offline Mode — Logging continues locally with AES-GCM encryption'}
-        </div>
-      )}
-
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6 space-y-5">
         {activeTab === 'today' && (
@@ -1050,6 +839,11 @@ export default function App() {
             onUpdateReminders={handleUpdateReminders}
             onTestAlarm={handleTestAlarm}
             onEnableAlarms={handleEnableAlarms}
+            onSelectDate={(d) => {
+              setActiveDate(d);
+              setActiveTab('today');
+            }}
+            onExportThreeMonthPdf={handleExportThreeMonthReport}
             isStandaloneTab
           />
         )}
@@ -1064,6 +858,11 @@ export default function App() {
             activityLogs={activityLogs}
             onAddEntry={handleAddProgressEntry}
             onApplyAdjustedTarget={handleApplyAdjustedTarget}
+            onDeleteFoodLog={handleDeleteFoodLog}
+            onSelectDate={(d) => {
+              setActiveDate(d);
+              setActiveTab('today');
+            }}
           />
         )}
 
@@ -1076,14 +875,8 @@ export default function App() {
             mealPlan={mealPlan}
             workoutPlan={workoutPlan}
             chatMessages={chatMessages}
-            onSaveMealPlan={(plan) => {
-              setMealPlan(plan);
-              if (firebaseUser) syncCoachPlanToCloud(currentUid, 'meal_plan', plan.title, plan).catch(() => {});
-            }}
-            onSaveWorkoutPlan={(plan) => {
-              setWorkoutPlan(plan);
-              if (firebaseUser) syncCoachPlanToCloud(currentUid, 'workout_plan', plan.title, plan).catch(() => {});
-            }}
+            onSaveMealPlan={(plan) => setMealPlan(plan)}
+            onSaveWorkoutPlan={(plan) => setWorkoutPlan(plan)}
             onAppendChat={(msgs) => setChatMessages((prev) => [...prev, ...msgs])}
             onLogPlannedMeal={(m) =>
               handleAddFoodLog({
@@ -1113,9 +906,7 @@ export default function App() {
             profile={profile}
             language={language}
             darkMode={darkMode}
-            isOnline={isOnline}
-            isSignedIn={Boolean(firebaseUser)}
-            userEmail={firebaseUser?.email}
+            savedFoodCount={foodLogs.length}
             reminders={reminders}
             onUpdateReminders={handleUpdateReminders}
             onEnableAlarms={handleEnableAlarms}
@@ -1123,9 +914,7 @@ export default function App() {
             onToggleDarkMode={handleToggleDarkMode}
             onToggleHealthSync={handleToggleHealthSync}
             onEditOnboarding={() => setEditingOnboarding(true)}
-            onGoogleSignIn={handleGoogleSignIn}
-            onFacebookSignIn={handleFacebookSignIn}
-            onSignOut={handleSignOut}
+            onExportThreeMonthPdf={handleExportThreeMonthReport}
             onExportJson={handleExportJson}
             onDeleteAllData={handleDeleteAllData}
           />
@@ -1326,44 +1115,17 @@ export default function App() {
                 <span>{darkMode ? (language === 'hi' ? 'डार्क' : 'Dark') : language === 'hi' ? 'लाइट' : 'Light'}</span>
               </button>
 
-              {firebaseUser ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSignOut();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900/60 text-xs font-semibold flex items-center gap-2.5"
-                >
-                  <LogOut className="w-4 h-4" />
-                  {t(language, 'signOut')}
-                </button>
-              ) : (
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      handleFacebookSignIn();
-                    }}
-                    className="w-full min-h-[42px] px-3.5 rounded-xl bg-[#1877F2] text-white text-xs font-semibold flex items-center gap-2.5"
-                  >
-                    <span className="font-bold text-sm">f</span>
-                    {t(language, 'signInFacebook')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      handleGoogleSignIn();
-                    }}
-                    className="w-full min-h-[42px] px-3.5 rounded-xl bg-slate-900 dark:bg-emerald-600 text-white text-xs font-semibold flex items-center gap-2.5"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    {t(language, 'signInGoogle')}
-                  </button>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  handleExportThreeMonthReport();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full min-h-[42px] px-3.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center gap-2.5"
+              >
+                <FileDown className="w-4 h-4" />
+                {language === 'hi' ? '3-माह भोजन PDF डाउनलोड' : '3-Month Report (PDF)'}
+              </button>
 
               <button
                 type="button"

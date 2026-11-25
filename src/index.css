@@ -34,6 +34,38 @@ html.dark body {
   color: #f1f5f2;
 }
 
+/* Progress ring completion halo & subtle settle */
+@keyframes ring-complete-halo {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.72;
+  }
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+
+@keyframes ring-complete-pop {
+  0% {
+    transform: scale(0.97);
+  }
+  45% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-ring-complete-halo {
+  animation: ring-complete-halo 1.15s cubic-bezier(0.16, 1, 0.3, 1) 2 forwards;
+}
+
+.animate-ring-complete-pop {
+  animation: ring-complete-pop 520ms cubic-bezier(0.16, 1, 0.3, 1) 1;
+}
+
 /* Smooth reduced-motion compliant transitions */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

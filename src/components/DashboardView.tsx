@@ -121,6 +121,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [celebrationQueue, setCelebrationQueue] = useState<{ id: number; kind: CelebrationKind }[]>([]);
   const celebration = celebrationQueue[0] || null;
+  const [justCompletedCalorie, setJustCompletedCalorie] = useState(false);
+  const [justCompletedWater, setJustCompletedWater] = useState(false);
 
   const calorieGoalMet = profile.dailyCalorieTarget > 0 && totals.calories >= profile.dailyCalorieTarget;
   const proteinGoalMet = profile.proteinTargetG > 0 && totals.protein >= profile.proteinTargetG;
@@ -129,58 +131,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const fiberGoalMet = profile.fiberTargetG > 0 && totals.fiber >= profile.fiberTargetG;
   const waterGoalMet = metrics.waterGoalMl > 0 && metrics.waterMl >= metrics.waterGoalMl;
 
-  const prevGoalStateRef = useRef<{
-    date: string;
+  type GoalSnapshot = {
     calorie: boolean;
     protein: boolean;
     carbs: boolean;
     fat: boolean;
     fiber: boolean;
     water: boolean;
-  }>({
-    date: activeDate,
-    calorie: calorieGoalMet,
-    protein: proteinGoalMet,
-    carbs: carbsGoalMet,
-    fat: fatGoalMet,
-    fiber: fiberGoalMet,
-    water: waterGoalMet,
-  });
+  };
+
+  const getGoalSessionKey = (dateStr: string) => `fitplat_goal_snapshot_${profile.uid}_${dateStr}`;
+
+  const readGoalSnapshot = (dateStr: string): GoalSnapshot | null => {
+    try {
+      const raw = sessionStorage.getItem(getGoalSessionKey(dateStr));
+      if (!raw) return null;
+      return JSON.parse(raw) as GoalSnapshot;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeGoalSnapshot = (dateStr: string, snap: GoalSnapshot) => {
+    try {
+      sessionStorage.setItem(getGoalSessionKey(dateStr), JSON.stringify(snap));
+    } catch {
+      // Ignore storage quota errors
+    }
+  };
+
+  const prevDateRef = useRef<string>(activeDate);
 
   useEffect(() => {
-    const prev = prevGoalStateRef.current;
-    if (prev.date !== activeDate) {
-      prevGoalStateRef.current = {
-        date: activeDate,
-        calorie: calorieGoalMet,
-        protein: proteinGoalMet,
-        carbs: carbsGoalMet,
-        fat: fatGoalMet,
-        fiber: fiberGoalMet,
-        water: waterGoalMet,
-      };
-      setCelebrationQueue([]);
-      return;
-    }
-
-    const newlyMet: CelebrationKind[] = [];
-    if (!prev.protein && proteinGoalMet) newlyMet.push('protein');
-    if (!prev.calorie && calorieGoalMet) newlyMet.push('calorie');
-    if (!prev.fiber && fiberGoalMet) newlyMet.push('fiber');
-    if (!prev.carbs && carbsGoalMet) newlyMet.push('carbs');
-    if (!prev.fat && fatGoalMet) newlyMet.push('fat');
-    if (!prev.water && waterGoalMet) newlyMet.push('water');
-
-    if (newlyMet.length > 0) {
-      const baseId = Date.now();
-      setCelebrationQueue((q) => [
-        ...q,
-        ...newlyMet.map((kind, idx) => ({ id: baseId + idx, kind })),
-      ]);
-    }
-
-    prevGoalStateRef.current = {
-      date: activeDate,
+    const currentSnapshot: GoalSnapshot = {
       calorie: calorieGoalMet,
       protein: proteinGoalMet,
       carbs: carbsGoalMet,
@@ -188,7 +171,64 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       fiber: fiberGoalMet,
       water: waterGoalMet,
     };
-  }, [activeDate, calorieGoalMet, proteinGoalMet, carbsGoalMet, fatGoalMet, fiberGoalMet, waterGoalMet]);
+
+    const existing = readGoalSnapshot(activeDate);
+    if (!existing) {
+      writeGoalSnapshot(activeDate, currentSnapshot);
+      if (prevDateRef.current !== activeDate) {
+        setCelebrationQueue([]);
+        setJustCompletedCalorie(false);
+        setJustCompletedWater(false);
+      }
+      prevDateRef.current = activeDate;
+      return;
+    }
+
+    if (prevDateRef.current !== activeDate) {
+      prevDateRef.current = activeDate;
+      setCelebrationQueue([]);
+      setJustCompletedCalorie(false);
+      setJustCompletedWater(false);
+      writeGoalSnapshot(activeDate, currentSnapshot);
+      return;
+    }
+
+    const newlyMet: CelebrationKind[] = [];
+    if (!existing.calorie && calorieGoalMet) newlyMet.push('calorie');
+    if (!existing.water && waterGoalMet) newlyMet.push('water');
+    if (!existing.protein && proteinGoalMet) newlyMet.push('protein');
+    if (!existing.fiber && fiberGoalMet) newlyMet.push('fiber');
+    if (!existing.carbs && carbsGoalMet) newlyMet.push('carbs');
+    if (!existing.fat && fatGoalMet) newlyMet.push('fat');
+
+    if (newlyMet.length > 0) {
+      const baseId = Date.now();
+      setCelebrationQueue((q) => [
+        ...q,
+        ...newlyMet.map((kind, idx) => ({ id: baseId + idx, kind })),
+      ]);
+      if (newlyMet.includes('calorie')) {
+        setJustCompletedCalorie(true);
+      }
+      if (newlyMet.includes('water')) {
+        setJustCompletedWater(true);
+      }
+    }
+
+    writeGoalSnapshot(activeDate, currentSnapshot);
+  }, [activeDate, calorieGoalMet, proteinGoalMet, carbsGoalMet, fatGoalMet, fiberGoalMet, waterGoalMet, profile.uid]);
+
+  useEffect(() => {
+    if (!justCompletedCalorie) return;
+    const tId = window.setTimeout(() => setJustCompletedCalorie(false), 2600);
+    return () => window.clearTimeout(tId);
+  }, [justCompletedCalorie]);
+
+  useEffect(() => {
+    if (!justCompletedWater) return;
+    const tId = window.setTimeout(() => setJustCompletedWater(false), 2600);
+    return () => window.clearTimeout(tId);
+  }, [justCompletedWater]);
 
   const handleCelebrationDone = useCallback(() => {
     setCelebrationQueue((q) => q.slice(1));
@@ -369,6 +409,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 labelRemaining={t(language, 'caloriesRemaining')}
                 labelOver={isHi ? 'अधिक' : 'Over'}
                 labelTarget={t(language, 'caloriesTarget')}
+                labelGoalMet={isHi ? 'लक्ष्य पूर्ण' : 'Goal Met'}
+                justCompleted={justCompletedCalorie}
               />
 
               <div className="flex-1 w-full grid grid-cols-2 gap-2.5">
@@ -592,6 +634,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 waterGoalMl={metrics.waterGoalMl}
                 labelGoalReached={isHi ? 'लक्ष्य पूर्ण' : 'Goal Met'}
                 labelOfGoal={isHi ? 'दैनिक लक्ष्य' : 'of daily goal'}
+                justCompleted={justCompletedWater}
               />
 
               <div className="flex-1 min-w-0 space-y-2">

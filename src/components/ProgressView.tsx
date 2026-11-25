@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Calendar, Camera, CheckCircle2, Droplets, Flame, Plus, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { Calendar, Camera, CheckCircle2, Droplets, FileDown, Flame, Plus, Scale, TrendingDown, TrendingUp } from 'lucide-react';
 import type {
   ActivityLogEntry,
   DailyMetrics,
@@ -9,10 +9,16 @@ import type {
   UserProfile,
 } from '../types/fitplate';
 import { evaluateWeeklyProgress } from '../utils/nutritionMath';
+import {
+  exportThreeMonthReportPdf,
+  exportWeeklyReportPdf,
+  subtractThreeMonthsIso,
+} from '../utils/exportWeeklyReportPdf';
 import { t } from '../i18n/translations';
 import { WeeklyWeightChart, type WeightChartRangeKey } from './WeeklyWeightChart';
+import { SavedFoodHistorySection } from './SavedFoodHistorySection';
 
-type ReportPeriod = '1w' | '1m' | 'all';
+type ReportPeriod = '1w' | '1m' | '3m' | 'all';
 
 interface ProgressViewProps {
   profile: UserProfile;
@@ -23,12 +29,21 @@ interface ProgressViewProps {
   activityLogs?: ActivityLogEntry[];
   onAddEntry: (entry: ProgressEntry) => void;
   onApplyAdjustedTarget: (newCalories: number) => void;
+  onDeleteFoodLog?: (id: string) => void;
+  onSelectDate?: (date: string) => void;
 }
 
 function shiftIsoDate(baseIso: string, deltaDays: number): string {
   const [y, m, d] = baseIso.split('-').map(Number);
   if (!y || !m || !d) return baseIso;
   return new Date(Date.UTC(y, m - 1, d + deltaDays)).toISOString().slice(0, 10);
+}
+
+function countDaysInclusive(startIso: string, endIso: string): number {
+  const [sy, sm, sd] = startIso.split('-').map(Number);
+  const [ey, em, ed] = endIso.split('-').map(Number);
+  if (!sy || !sm || !sd || !ey || !em || !ed) return 90;
+  return Math.max(1, Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1);
 }
 
 export const ProgressView: React.FC<ProgressViewProps> = ({
@@ -40,6 +55,8 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
   activityLogs = [],
   onAddEntry,
   onApplyAdjustedTarget,
+  onDeleteFoodLog,
+  onSelectDate,
 }) => {
   const isHi = language === 'hi';
   const sorted = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries]);
@@ -54,6 +71,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
   const [armsCm, setArmsCm] = useState<string>('');
   const [note, setNote] = useState('');
   const [photoDataUrl, setPhotoDataUrl] = useState<string | undefined>(undefined);
+  const [exportNotice, setExportNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const weightInputRef = useRef<HTMLInputElement | null>(null);
 
   const report = useMemo(
@@ -70,11 +88,18 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
     [entries, profile]
   );
 
-  // Build 1-Week (7d), 1-Month (30d), or All-Time Progress Report summary
+  // Build 1-Week (7d), 1-Month (30d), 3-Month, or All-Time Progress Report summary
   const periodSummary = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
-    const windowDays = reportPeriod === '1w' ? 7 : reportPeriod === '1m' ? 30 : null;
-    const cutoffDate = windowDays ? shiftIsoDate(todayStr, -(windowDays - 1)) : null;
+    const cutoffDate =
+      reportPeriod === '1w'
+        ? shiftIsoDate(todayStr, -6)
+        : reportPeriod === '1m'
+        ? shiftIsoDate(todayStr, -29)
+        : reportPeriod === '3m'
+        ? subtractThreeMonthsIso(todayStr)
+        : null;
+    const windowDays = cutoffDate ? countDaysInclusive(cutoffDate, todayStr) : null;
 
     const inPeriod = (iso: string) => (!cutoffDate ? true : iso >= cutoffDate && iso <= todayStr);
 
@@ -142,7 +167,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
     const metricBurn = metricEntries.reduce((s, m) => s + (m.exerciseCalories || 0), 0);
     const totalBurnedKcal = Math.max(activityBurnInLogs, metricBurn);
 
-    // Build chronological daily rows for the selected window (most recent first, max 30 days)
+    // Build chronological daily rows for the selected window (most recent first, max 95 days)
     const allDatesSet = new Set<string>([
       ...dayTotals.keys(),
       ...waterDays.map((m) => m.date),
@@ -150,7 +175,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
     ]);
     const dailyBreakdown = Array.from(allDatesSet)
       .sort((a, b) => b.localeCompare(a))
-      .slice(0, windowDays || 30)
+      .slice(0, windowDays || 95)
       .map((dIso) => {
         const macros = dayTotals.get(dIso);
         const m = dailyMetricsMap[dIso];
@@ -230,10 +255,62 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
     weightInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  const chartSelectedRange: WeightChartRangeKey = reportPeriod;
+  const chartSelectedRange: WeightChartRangeKey = reportPeriod === '3m' ? '12w' : reportPeriod;
   const handleChartRangeChange = (next: WeightChartRangeKey) => {
-    if (next === '1w' || next === '1m' || next === 'all') {
+    if (next === '12w') {
+      setReportPeriod('3m');
+    } else if (next === '1w' || next === '1m' || next === 'all') {
       setReportPeriod(next);
+    }
+  };
+
+  const handleExportWeeklyReport = () => {
+    try {
+      const result = exportWeeklyReportPdf({
+        profile,
+        entries,
+        foodLogs,
+        dailyMetricsMap,
+        activityLogs,
+      });
+      setExportNotice({
+        type: 'ok',
+        text: isHi
+          ? `साप्ताहिक PDF रिपोर्ट डाउनलोड हो गई: ${result.fileName}`
+          : `Weekly PDF report downloaded: ${result.fileName}`,
+      });
+    } catch {
+      setExportNotice({
+        type: 'err',
+        text: isHi
+          ? 'PDF रिपोर्ट बनाने में त्रुटि हुई। कृपया पुनः प्रयास करें।'
+          : 'Could not generate PDF report. Please try again.',
+      });
+    }
+  };
+
+  const handleExportThreeMonthReport = () => {
+    try {
+      const result = exportThreeMonthReportPdf({
+        profile,
+        entries,
+        foodLogs,
+        dailyMetricsMap,
+        activityLogs,
+      });
+      setExportNotice({
+        type: 'ok',
+        text: isHi
+          ? `3-माह भोजन और पोषण PDF डाउनलोड हो गई: ${result.fileName}`
+          : `3-Month food & nutrition PDF downloaded: ${result.fileName}`,
+      });
+    } catch {
+      setExportNotice({
+        type: 'err',
+        text: isHi
+          ? '3-माह PDF रिपोर्ट बनाने में त्रुटि हुई। कृपया पुनः प्रयास करें।'
+          : 'Could not generate 3-Month PDF report. Please try again.',
+      });
     }
   };
 
@@ -254,6 +331,10 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                   ? isHi
                     ? '1 माह प्रगति रिपोर्ट'
                     : '1-Month Progress Report'
+                  : reportPeriod === '3m'
+                  ? isHi
+                    ? '3 माह प्रगति रिपोर्ट'
+                    : '3-Month Progress Report'
                   : isHi
                   ? 'संपूर्ण प्रगति रिपोर्ट'
                   : 'All-Time Progress Report'}
@@ -267,6 +348,10 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                   ? isHi
                     ? 'पिछले 30 दिनों का वज़न, पोषण और पानी सारांश'
                     : 'Last 30 days weight, nutrition, hydration & burn summary'
+                  : reportPeriod === '3m'
+                  ? isHi
+                    ? 'पिछले 3 महीनों का भोजन, पोषण और वज़न सारांश'
+                    : 'Last 3 months food logs, nutrition, hydration & weight summary'
                   : isHi
                   ? 'शुरुआत से अब तक की कुल प्रगति'
                   : 'Full history calibrated against your goal timeline'}
@@ -280,6 +365,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                   [
                     ['1w', isHi ? '1 सप्ताह' : '1 Week'],
                     ['1m', isHi ? '1 माह' : '1 Month'],
+                    ['3m', isHi ? '3 माह' : '3 Months'],
                     ['all', isHi ? 'सभी' : 'All Time'],
                   ] as [ReportPeriod, string][]
                 ).map(([val, lbl]) => (
@@ -287,7 +373,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                     key={val}
                     type="button"
                     onClick={() => setReportPeriod(val)}
-                    className={`min-h-[36px] px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                    className={`min-h-[36px] px-2.5 sm:px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                       reportPeriod === val
                         ? 'bg-emerald-600 text-white shadow-2xs'
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
@@ -317,8 +403,45 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                   ? t(language, 'ahead')
                   : t(language, 'insufficientData')}
               </span>
+
+              <button
+                type="button"
+                onClick={handleExportWeeklyReport}
+                className="min-h-[38px] px-3.5 rounded-xl border border-emerald-600/30 dark:border-emerald-700/60 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
+              >
+                <FileDown className="w-4 h-4 shrink-0" />
+                <span>{isHi ? 'साप्ताहिक रिपोर्ट (PDF)' : 'Export Weekly Report'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportThreeMonthReport}
+                className="min-h-[38px] px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
+              >
+                <FileDown className="w-4 h-4 shrink-0" />
+                <span>{isHi ? '3-माह रिपोर्ट (PDF)' : 'Export 3-Month Report'}</span>
+              </button>
             </div>
           </div>
+
+          {exportNotice && (
+            <div
+              className={`px-3.5 py-2 rounded-xl text-xs font-medium flex items-center justify-between gap-2 ${
+                exportNotice.type === 'ok'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200'
+              }`}
+            >
+              <span className="truncate">{exportNotice.text}</span>
+              <button
+                type="button"
+                onClick={() => setExportNotice(null)}
+                className="text-[11px] font-semibold underline shrink-0"
+              >
+                {isHi ? 'बंद करें' : 'Dismiss'}
+              </button>
+            </div>
+          )}
 
           {/* Primary Weight & Rate Cards */}
           <div className="grid grid-cols-3 gap-3">
@@ -336,6 +459,10 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                   ? isHi
                     ? '30-दिन बदलाव'
                     : '30-Day Change'
+                  : reportPeriod === '3m'
+                  ? isHi
+                    ? '3-माह बदलाव'
+                    : '3-Month Change'
                   : isHi
                   ? 'साप्ताहिक बदलाव'
                   : 'Weekly Rate'}
@@ -436,6 +563,10 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                     ? isHi
                       ? 'पिछले 30 दिनों का दैनिक विवरण'
                       : 'Daily Breakdown (Last 30 Days)'
+                    : reportPeriod === '3m'
+                    ? isHi
+                      ? 'पिछले 3 महीनों का दैनिक विवरण'
+                      : 'Daily Breakdown (Last 3 Months)'
                     : isHi
                     ? 'हालिया दैनिक विवरण'
                     : 'Recent Daily Breakdown'}
@@ -492,7 +623,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
             )}
         </section>
 
-        {/* Synced Weight Trend Chart (supports 1W, 1M, 12W, All) */}
+        {/* Synced Weight Trend Chart (supports 1W, 1M, 3M, All) */}
         <WeeklyWeightChart
           entries={entries}
           targetWeightKg={profile.targetWeightKg}
@@ -501,6 +632,16 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
           selectedRange={chartSelectedRange}
           onRangeChange={handleChartRangeChange}
           onFocusLogForm={handleFocusLogForm}
+        />
+
+        {/* Anytime Saved Food History + 3-Month PDF Export */}
+        <SavedFoodHistorySection
+          language={language}
+          foodLogs={foodLogs}
+          onDeleteLog={onDeleteFoodLog}
+          onSelectDate={onSelectDate}
+          onExportThreeMonthPdf={handleExportThreeMonthReport}
+          defaultRange={reportPeriod === '1w' ? '7d' : reportPeriod === '1m' ? '1m' : reportPeriod === 'all' ? 'all' : '3m'}
         />
 
         {/* History & Photos */}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -12,7 +12,6 @@ import {
   Utensils,
 } from 'lucide-react';
 import type { ActivityLevel, DietType, Gender, Language, UserProfile } from '../types/fitplate';
-import type { SocialPrefillData } from '../services/firebaseClient';
 import { calculateNutritionPlan } from '../utils/nutritionMath';
 import { deriveMealTimesFromWakeUp, isNightShiftWakeTime } from '../data/activitiesCatalog';
 import { t } from '../i18n/translations';
@@ -20,15 +19,10 @@ import { BrandLogo } from './BrandLogo';
 
 interface OnboardingFlowProps {
   initialProfile?: UserProfile | null;
-  socialPrefill?: SocialPrefillData | null;
   language: Language;
   onChangeLanguage: (lang: Language) => void;
   onComplete: (profile: UserProfile) => void;
   onCancel?: () => void;
-  onGoogleSignIn?: () => void;
-  onFacebookSignIn?: () => void;
-  isSignedIn?: boolean;
-  userEmail?: string | null;
 }
 
 const ALLERGY_OPTIONS = ['Dairy', 'Nuts', 'Gluten', 'Soy', 'Eggs', 'Fish', 'Shellfish'];
@@ -48,20 +42,13 @@ export function calculateAgeFromDob(dobStr: string): number | null {
 
 export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
   initialProfile,
-  socialPrefill,
   language,
   onChangeLanguage,
   onComplete,
   onCancel,
-  onGoogleSignIn,
-  onFacebookSignIn,
-  isSignedIn,
-  userEmail,
 }) => {
-  const [name, setName] = useState(initialProfile?.name || socialPrefill?.name || '');
-  const [dateOfBirth, setDateOfBirth] = useState(
-    initialProfile?.dateOfBirth || socialPrefill?.dateOfBirth || ''
-  );
+  const [name, setName] = useState(initialProfile?.name || '');
+  const [dateOfBirth, setDateOfBirth] = useState(initialProfile?.dateOfBirth || '');
   const [gender, setGender] = useState<Gender>(initialProfile?.gender || 'male');
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
   const [heightInput, setHeightInput] = useState<string>(
@@ -86,13 +73,6 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [heroImgError, setHeroImgError] = useState(false);
-
-  // Sync Facebook / Google prefill info when social login completes
-  useEffect(() => {
-    if (!socialPrefill) return;
-    if (socialPrefill.name && !name.trim()) setName(socialPrefill.name);
-    if (socialPrefill.dateOfBirth && !dateOfBirth) setDateOfBirth(socialPrefill.dateOfBirth);
-  }, [socialPrefill]);
 
   const computedAge = useMemo(() => {
     const fromDob = calculateAgeFromDob(dateOfBirth);
@@ -180,7 +160,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
     healthSyncEnabled: initialProfile?.healthSyncEnabled ?? false,
     wakeUpTime,
     sleepTime,
-    authProvider: socialPrefill?.provider || initialProfile?.authProvider || 'local',
+    authProvider: 'local',
     reminders: {
       ...deriveMealTimesFromWakeUp(wakeUpTime, sleepTime),
       waterIntervalMin: initialProfile?.reminders?.waterIntervalMin ?? 90,
@@ -272,70 +252,8 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
               <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               {isHi ? 'English' : 'हिन्दी'}
             </button>
-            {isSignedIn && userEmail && (
-              <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium truncate max-w-[180px]">
-                {userEmail}
-              </span>
-            )}
           </div>
         </div>
-
-        {/* Social Quick Login Card (Facebook & Google) */}
-        {!isSignedIn && (onFacebookSignIn || onGoogleSignIn) && (
-          <div className="bg-white dark:bg-[#111a15] rounded-3xl border border-slate-200/80 dark:border-emerald-900/50 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <h2 className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white">
-                {isHi
-                  ? 'Facebook या Google ID से तुरंत प्रोफ़ाइल भरें'
-                  : 'Sign in with Facebook or Google ID'}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isHi
-                  ? 'Facebook लॉगिन से आपका नाम और जन्मतिथि अपने आप भर जाएगी — बस वज़न, लक्ष्य वज़न और उठने का समय दर्ज करें।'
-                  : 'Facebook imports your Name & Date of Birth automatically — then just enter your Weight, Target Weight & Wake-Up Time.'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {onFacebookSignIn && (
-                <button
-                  type="button"
-                  onClick={onFacebookSignIn}
-                  className="min-h-[44px] px-4 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors"
-                >
-                  <span className="w-5 h-5 rounded-full bg-white text-[#1877F2] font-bold flex items-center justify-center text-xs">
-                    f
-                  </span>
-                  {t(language, 'signInFacebook')}
-                </button>
-              )}
-              {onGoogleSignIn && (
-                <button
-                  type="button"
-                  onClick={onGoogleSignIn}
-                  className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-600 text-white text-xs font-semibold hover:opacity-90 transition-opacity whitespace-nowrap"
-                >
-                  {t(language, 'signInGoogle')}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {socialPrefill && (
-          <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm text-emerald-900 dark:text-emerald-100">
-            {socialPrefill.provider === 'facebook'
-              ? isHi
-                ? `Facebook ID से जुड़ गया${socialPrefill.name ? ` (${socialPrefill.name})` : ''}। कृपया अपना वज़न, लक्ष्य वज़न, उठने का समय${
-                    socialPrefill.dateOfBirth ? '' : ' और जन्मतिथि'
-                  } नीचे भरें।`
-                : `Connected with Facebook${socialPrefill.name ? ` (${socialPrefill.name})` : ''}! Please complete your Current Weight, Target Weight, Wake-Up Time${
-                    socialPrefill.dateOfBirth ? '' : ', and Date of Birth'
-                  } below to create your profile.`
-              : isHi
-              ? 'Google अकाउंट से जुड़ गया! नीचे अपनी जानकारी भरें और सबमिट करें।'
-              : 'Connected with Google! Please complete your profile details below to get started.'}
-          </div>
-        )}
 
         {/* Hero Split */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
