@@ -1,6 +1,7 @@
 import type { FoodItem } from '../types/fitplate';
 import { FRUITS_SALADS_MAHARASHTRIAN_FOODS } from './fruitsSaladsMaharashtrianFoods';
 import { CAKES_PUFFS_DIMSUM_CHAKNA_FOODS } from './cakesPuffsDimsumChaknaFoods';
+import { JUICES_BHUTTA_POPCORN_SWEETPOTATO_FOODS } from './juicesBhuttaPopcornSweetPotatoFoods';
 
 export const INDIAN_AND_GLOBAL_FOODS: FoodItem[] = [
   {
@@ -5907,6 +5908,7 @@ export const INDIAN_AND_GLOBAL_FOODS: FoodItem[] = [
   },
   ...FRUITS_SALADS_MAHARASHTRIAN_FOODS,
   ...CAKES_PUFFS_DIMSUM_CHAKNA_FOODS,
+  ...JUICES_BHUTTA_POPCORN_SWEETPOTATO_FOODS,
 ];
 
 export function computeMacrosForGrams(food: FoodItem, grams: number) {

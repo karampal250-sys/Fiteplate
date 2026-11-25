@@ -52,7 +52,6 @@ interface FoodLoggerSheetProps {
   onTestAlarm?: () => void;
   onEnableAlarms?: () => void;
   onSelectDate?: (date: string) => void;
-  onExportThreeMonthPdf?: () => void;
   onClose?: () => void;
   isStandaloneTab?: boolean;
 }
@@ -85,7 +84,6 @@ export const FoodLoggerSheet: React.FC<FoodLoggerSheetProps> = ({
   onTestAlarm,
   onEnableAlarms,
   onSelectDate,
-  onExportThreeMonthPdf,
   onClose,
   isStandaloneTab,
 }) => {
@@ -991,7 +989,6 @@ export const FoodLoggerSheet: React.FC<FoodLoggerSheetProps> = ({
             foodLogs={dayLogs}
             onDeleteLog={onDeleteLog}
             onSelectDate={onSelectDate}
-            onExportThreeMonthPdf={onExportThreeMonthPdf}
             defaultRange="3m"
           />
         </div>

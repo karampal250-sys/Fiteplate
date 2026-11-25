@@ -10,7 +10,6 @@ import type {
 } from '../types/fitplate';
 import { evaluateWeeklyProgress } from '../utils/nutritionMath';
 import {
-  exportThreeMonthReportPdf,
   exportWeeklyReportPdf,
   subtractThreeMonthsIso,
 } from '../utils/exportWeeklyReportPdf';
@@ -289,31 +288,6 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
     }
   };
 
-  const handleExportThreeMonthReport = () => {
-    try {
-      const result = exportThreeMonthReportPdf({
-        profile,
-        entries,
-        foodLogs,
-        dailyMetricsMap,
-        activityLogs,
-      });
-      setExportNotice({
-        type: 'ok',
-        text: isHi
-          ? `3-माह भोजन और पोषण PDF डाउनलोड हो गई: ${result.fileName}`
-          : `3-Month food & nutrition PDF downloaded: ${result.fileName}`,
-      });
-    } catch {
-      setExportNotice({
-        type: 'err',
-        text: isHi
-          ? '3-माह PDF रिपोर्ट बनाने में त्रुटि हुई। कृपया पुनः प्रयास करें।'
-          : 'Could not generate 3-Month PDF report. Please try again.',
-      });
-    }
-  };
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* Left: 1 Week / 1 Month / All Time Progress Report + Weight Graph */}
@@ -407,19 +381,10 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
               <button
                 type="button"
                 onClick={handleExportWeeklyReport}
-                className="min-h-[38px] px-3.5 rounded-xl border border-emerald-600/30 dark:border-emerald-700/60 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
-              >
-                <FileDown className="w-4 h-4 shrink-0" />
-                <span>{isHi ? 'साप्ताहिक रिपोर्ट (PDF)' : 'Export Weekly Report'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportThreeMonthReport}
                 className="min-h-[38px] px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
               >
                 <FileDown className="w-4 h-4 shrink-0" />
-                <span>{isHi ? '3-माह रिपोर्ट (PDF)' : 'Export 3-Month Report'}</span>
+                <span>{isHi ? 'साप्ताहिक रिपोर्ट (PDF)' : 'Export Weekly Report'}</span>
               </button>
             </div>
           </div>
@@ -634,13 +599,12 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
           onFocusLogForm={handleFocusLogForm}
         />
 
-        {/* Anytime Saved Food History + 3-Month PDF Export */}
+        {/* Anytime Saved Food History */}
         <SavedFoodHistorySection
           language={language}
           foodLogs={foodLogs}
           onDeleteLog={onDeleteFoodLog}
           onSelectDate={onSelectDate}
-          onExportThreeMonthPdf={handleExportThreeMonthReport}
           defaultRange={reportPeriod === '1w' ? '7d' : reportPeriod === '1m' ? '1m' : reportPeriod === 'all' ? 'all' : '3m'}
         />
 

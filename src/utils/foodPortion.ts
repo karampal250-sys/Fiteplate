@@ -24,7 +24,7 @@ export interface SmartUnitInfo {
 }
 
 const BOWL_KEYWORDS_REGEX =
-  /\b(bowl|katori|dal|daliya|khichdi|poha|upma|oats|curd|dahi|raita|salad|koshimbir|soup|sprouts|sabzi|curry|rajma|chole|chana|kadhi|sambar|rasam|halwa|kheer|custard|porridge|payasam|pongal|bhel|muesli|cornflakes|pulao|biryani|fried rice|noodles|pasta|macaroni|pithla|zunka|usal|amti|varan|bharli|rassa|shrikhand|basundi|sheera|chakna|namkeen|bhujia|mixture|chivda|boondi|peanuts|makhana)\b/i;
+  /\b(bowl|katori|dal|daliya|khichdi|poha|upma|oats|curd|dahi|raita|salad|koshimbir|soup|sprouts|sabzi|curry|rajma|chole|chana|kadhi|sambar|rasam|halwa|kheer|custard|porridge|payasam|pongal|bhel|muesli|cornflakes|pulao|biryani|fried rice|noodles|pasta|macaroni|pithla|zunka|usal|amti|varan|bharli|rassa|shrikhand|basundi|sheera|chakna|namkeen|bhujia|mixture|chivda|boondi|peanuts|makhana|popcorn|shakarkandi|sweet corn)\b/i;
 
 export function formatQtyNumber(val: number): string {
   const rounded = Math.round(val * 100) / 100;

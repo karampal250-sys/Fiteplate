@@ -5,7 +5,6 @@ import {
   BellRing,
   Check,
   Download,
-  FileDown,
   Globe,
   Home,
   Menu,
@@ -36,7 +35,6 @@ import type {
   UserProfile,
 } from './types/fitplate';
 import { loadEncryptedState, saveEncryptedState, wipeAllLocalHealthData } from './utils/cryptoStorage';
-import { exportThreeMonthReportPdf } from './utils/exportWeeklyReportPdf';
 import { calculateNutritionPlan } from './utils/nutritionMath';
 import {
   buildDailySchedule,
@@ -623,26 +621,6 @@ export default function App() {
     }
   };
 
-  const handleExportThreeMonthReport = () => {
-    if (!profile) return;
-    try {
-      const res = exportThreeMonthReportPdf({
-        profile,
-        entries: progressEntries,
-        foodLogs,
-        dailyMetricsMap,
-        activityLogs,
-      });
-      showToast(
-        language === 'hi'
-          ? `3-माह PDF डाउनलोड: ${res.fileName}`
-          : `Downloaded 3-Month PDF: ${res.fileName}`
-      );
-    } catch {
-      showToast(language === 'hi' ? 'PDF डाउनलोड विफल' : 'Could not generate PDF');
-    }
-  };
-
   const handleExportJson = () => {
     const bundle = {
       exportedAt: new Date().toISOString(),
@@ -843,7 +821,6 @@ export default function App() {
               setActiveDate(d);
               setActiveTab('today');
             }}
-            onExportThreeMonthPdf={handleExportThreeMonthReport}
             isStandaloneTab
           />
         )}
@@ -914,7 +891,6 @@ export default function App() {
             onToggleDarkMode={handleToggleDarkMode}
             onToggleHealthSync={handleToggleHealthSync}
             onEditOnboarding={() => setEditingOnboarding(true)}
-            onExportThreeMonthPdf={handleExportThreeMonthReport}
             onExportJson={handleExportJson}
             onDeleteAllData={handleDeleteAllData}
           />
@@ -1113,18 +1089,6 @@ export default function App() {
                   {t(language, 'themeLabel')}
                 </span>
                 <span>{darkMode ? (language === 'hi' ? 'डार्क' : 'Dark') : language === 'hi' ? 'लाइट' : 'Light'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handleExportThreeMonthReport();
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full min-h-[42px] px-3.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center gap-2.5"
-              >
-                <FileDown className="w-4 h-4" />
-                {language === 'hi' ? '3-माह भोजन PDF डाउनलोड' : '3-Month Report (PDF)'}
               </button>
 
               <button

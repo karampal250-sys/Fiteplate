@@ -7,7 +7,6 @@ import {
   Clock,
   Download,
   Droplets,
-  FileDown,
   Globe,
   HardDrive,
   Lock,
@@ -35,7 +34,6 @@ interface ProfileSettingsViewProps {
   onToggleDarkMode: () => void;
   onToggleHealthSync: () => void;
   onEditOnboarding: () => void;
-  onExportThreeMonthPdf?: () => void;
   onExportJson: () => void;
   onDeleteAllData: () => Promise<void>;
 }
@@ -52,7 +50,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   onToggleDarkMode,
   onToggleHealthSync,
   onEditOnboarding,
-  onExportThreeMonthPdf,
   onExportJson,
   onDeleteAllData,
 }) => {
@@ -398,16 +395,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {onExportThreeMonthPdf && (
-              <button
-                type="button"
-                onClick={onExportThreeMonthPdf}
-                className="min-h-[44px] px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5"
-              >
-                <FileDown className="w-4 h-4" />
-                {isHi ? '3-माह भोजन PDF डाउनलोड' : '3-Month Report (PDF)'}
-              </button>
-            )}
             <button
               type="button"
               onClick={onExportJson}
@@ -476,7 +463,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         {showBlueprint && (
           <div className="px-5 pb-5 pt-2 border-t border-slate-100 dark:border-emerald-950 text-xs text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
             <div>
-              <strong className="text-slate-900 dark:text-white">Screens:</strong> 1. Onboarding & Goal Calculator · 2. Daily Dashboard · 3. Food Search, Saved History & Daily Schedule · 4. Quick Manual Food Entry · 5. Progress, Weekly & 3-Month PDF Reports · 6. AI Coach (7-Day Meal Plan, Home/Gym Workouts, Chat) · 7. Settings & Local Privacy.
+              <strong className="text-slate-900 dark:text-white">Screens:</strong> 1. Onboarding & Goal Calculator · 2. Daily Dashboard · 3. Food Search, Saved History & Daily Schedule · 4. Quick Manual Food Entry · 5. Progress & Weekly PDF Reports · 6. AI Coach (7-Day Meal Plan, Home/Gym Workouts, Chat) · 7. Settings & Local Privacy.
             </div>
             <div>
               <strong className="text-slate-900 dark:text-white">On-Device Encrypted Stores (IndexedDB + AES-GCM):</strong>{' '}

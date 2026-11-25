@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, FileDown, History, Search, Trash2, UtensilsCrossed } from 'lucide-react';
+import { Calendar, History, Search, Trash2, UtensilsCrossed } from 'lucide-react';
 import type { FoodLogEntry, Language, MealType } from '../types/fitplate';
 import { subtractThreeMonthsIso } from '../utils/exportWeeklyReportPdf';
 import { formatLoggedEntryQty, resolveStoredUnitInfo } from '../utils/foodPortion';
@@ -12,7 +12,6 @@ interface SavedFoodHistorySectionProps {
   foodLogs: FoodLogEntry[];
   onDeleteLog?: (id: string) => void;
   onSelectDate?: (date: string) => void;
-  onExportThreeMonthPdf?: () => void;
   defaultRange?: HistoryRange;
 }
 
@@ -27,7 +26,6 @@ export const SavedFoodHistorySection: React.FC<SavedFoodHistorySectionProps> = (
   foodLogs,
   onDeleteLog,
   onSelectDate,
-  onExportThreeMonthPdf,
   defaultRange = '3m',
 }) => {
   const isHi = language === 'hi';
@@ -133,17 +131,6 @@ export const SavedFoodHistorySection: React.FC<SavedFoodHistorySectionProps> = (
             </p>
           </div>
         </div>
-
-        {onExportThreeMonthPdf && (
-          <button
-            type="button"
-            onClick={onExportThreeMonthPdf}
-            className="min-h-[38px] px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
-          >
-            <FileDown className="w-4 h-4 shrink-0" />
-            <span>{isHi ? '3-माह भोजन PDF डाउनलोड' : 'Download 3-Month Food PDF'}</span>
-          </button>
-        )}
       </div>
 
       {/* Filters Row */}
